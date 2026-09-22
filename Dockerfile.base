@@ -1,0 +1,31 @@
+# PWare OS backend base — the Hermes brain, built once and pulled everywhere.
+#
+# This is the heavy layer (73): ubuntu + the Hermes install, published to
+# ghcr.io/pleware/pware-os-backend-base:<commit> by CI. The box's `Dockerfile`
+# builds FROM this, so a box never re-runs the installer — it pulls the base.
+#
+# The install is pinned to a commit (`--commit`) and skips the browser and
+# computer-use tooling (`--skip-browser --skip-computer-use`) because the
+# narrator and staff gateways are headless: they deliberate over stdio and
+# RoomLink, never drive a browser or a desktop. `--skip-setup` drops the
+# interactive wizard — profile config is planted by `pware fleet sync`, not
+# typed at build time.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates git openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Hermes — the box's orchestration brain (56, 57: the narrator + per-org
+# staff gateways). Pinned: bump the SHA to a verified commit on a deliberate
+# upgrade; the base image tag follows (see .github/workflows/publish-base.yml).
+ARG HERMES_COMMIT=080907e3b7ad4985cf4a7c73024a283a49381ba8
+RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- \
+        --skip-browser --skip-computer-use --skip-setup --commit "${HERMES_COMMIT}"
+
+WORKDIR /pware-os
+
+CMD ["bash"]

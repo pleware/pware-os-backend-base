@@ -1,0 +1,66 @@
+name: Publish base image
+
+# Builds and publishes the PWare OS backend BASE image (73) — the heavy Hermes
+# layer the box's thin Dockerfile builds FROM. Runs on a tag push (a deliberate
+# release) so the base image tag stays pinned to a reviewed commit, never to a
+# moving `main`. The commit is read from Dockerfile.base's HERMES_COMMIT ARG, so
+# the image tag can never drift from the pin the box's Dockerfile expects.
+#
+# This repo is PUBLIC on purpose (73, decided 2026-09-23): it holds nothing
+# PWare-owned — ubuntu 24.04, four apt packages, and a MIT Hermes install. A
+# customer box pulls the image with no credential. The PWare code lives in the
+# private pware-os-cli repo, whose thin Dockerfile only does `FROM` this base.
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual re-publish (e.g. rebuilding a pinned base without minting a version
+  # tag). Visibility is set once by hand in the package UI, not here.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned Hermes commit
+        id: pin
+        run: |
+          commit=$(sed -nE 's/^ARG HERMES_COMMIT=([0-9a-f]{40})/\1/p' Dockerfile.base)
+          if [ -z "$commit" ]; then
+            echo "HERMES_COMMIT not found in Dockerfile.base" >&2
+            exit 1
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Pinned Hermes commit: $commit"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the base image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.base
+          build-args: |
+            HERMES_COMMIT=${{ steps.pin.outputs.commit }}
+          tags: |
+            ghcr.io/pleware/pware-os-backend-base:${{ steps.pin.outputs.commit }}
+          push: true
+
+      # Visibility is NOT scriptable: GitHub has no API or CLI to change a
+      # package's visibility (cli/cli#6820). It is a one-time, IRREVERSIBLE
+      # action in the package UI (Danger Zone -> Change visibility -> Public),
+      # and it is sticky per package — once public, every later push stays
+      # public. With this repo public, the package linked to it can be made
+      # public. That flip is still one manual step; this workflow never does it.
