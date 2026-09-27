@@ -1,0 +1,5 @@
+# agentize: rendered per-worker, not committed
+.cursor/mcp.json
+.cursor/rules/agentize.auto.generated.*
+.cursor/skills/agentize.auto.generated.*
+.opencode/skills/agentize.auto.generated.*
